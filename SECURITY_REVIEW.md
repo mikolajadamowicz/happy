@@ -37,11 +37,24 @@ The server (PostgreSQL database) stores the following data:
 - **Token-based auth with `privacy-kit`.** Bearer tokens are cryptographically generated and verified, not JWT (which has known footgun issues).
 
 **Concerns and weaknesses:**
-- **Token cache never expires** (`auth.ts:102-103`). Tokens are cached permanently in memory with a comment "Cache the result permanently." There is no TTL or eviction. This means: (a) memory grows unboundedly over time, and (b) a compromised token can never be truly revoked server-side (only removed from the in-memory cache, which resets on restart).
-- **`HANDY_MASTER_SECRET` is critical.** All server-side encryption (vendor tokens) and auth token generation derive from this single secret. If it leaks, all vendor tokens and auth tokens are compromised.
-- **Server-side encrypted tokens (GitHub/vendor) are not E2E encrypted.** A server operator with access to `HANDY_MASTER_SECRET` can decrypt these. This is documented but worth noting.
-- **No rate limiting visible** in the auth routes or Socket.IO connection handlers. This could allow brute-force or denial-of-service attacks.
-- **Server test coverage is low** - only 5 test files found for the entire server package.
+
+| Severity | Issue | Location | Impact |
+|----------|-------|----------|--------|
+| Critical | **CORS open to all origins** (`origin: '*'`) | `api.ts`, `socket.ts` | Any website can make API requests; combined with token auth, enables cross-site attacks |
+| Critical | **Token cache never expires** | `auth.ts:102-103` | Compromised tokens valid forever; memory grows unboundedly |
+| High | **`HANDY_MASTER_SECRET` is a single point of failure** | `encrypt.ts`, `auth.ts` | If leaked: all vendor tokens, auth tokens, and server-side encrypted data compromised |
+| High | **Path traversal - symlink risk** | `api.ts:61-74` | File serving checks `startsWith(baseDir)` but doesn't guard against symlinks |
+| Medium | **No rate limiting** | Auth routes, Socket.IO | Brute-force and denial-of-service attacks possible |
+| Medium | **Webhook body accepts `z.any()`** | `connectRoutes.ts` | DoS risk via large payloads (only limited by 100MB Fastify body limit) |
+| Medium | **User IDs leaked in error messages** | `voiceRoutes.ts:98` | Information disclosure (minor, CUIDs not sensitive, but violates least-privilege) |
+| Low | **Server test coverage is low** | Server package | Only 5 test files for entire server |
+| Low | **Dev logging flag** | `.env.dev` | `DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING` logs user IDs and operation details |
+
+**Details on critical issues:**
+
+1. **CORS `origin: '*'`** - Both the Fastify HTTP server and the Socket.IO server allow requests from any origin. While the app uses Bearer tokens (not cookies), this still broadens the attack surface unnecessarily and could enable token theft via XSS on any domain.
+
+2. **Token cache never expires** - The comment in `auth.ts` says "tokens are cached forever as requested." There is no TTL, no eviction, and no true revocation mechanism. A compromised token grants indefinite access until the server restarts.
 
 ### Can a third-party server operator read your data?
 
@@ -113,8 +126,16 @@ The mobile app is written in **React Native with Expo SDK 54**, targeting:
 - **Some naming inconsistencies.** Mix of `typesRaw.ts`, `typesMessage.ts`, `apiTypes.ts`, and `storageTypes.ts` - the naming convention for type files varies.
 - **File named `modeHacks.ts`** suggests workarounds that may accumulate technical debt.
 
+### Additional weaknesses (from deep analysis):
+- **Silent failures in decryption.** Many crypto operations return `null` on failure and log to `console.error()` without notifying the user. Critical operations should surface errors.
+- **No RPC timeouts on socket calls.** `emitWithAck` calls can hang indefinitely without timeout protection.
+- **Web credential storage is insecure.** On web, auth tokens are stored in `localStorage` (vulnerable to XSS). Native platforms correctly use `expo-secure-store`.
+- **Large components.** `AgentInput.tsx` (1,214 lines) and `NewSessionWizard.tsx` (1,917 lines) need splitting.
+- **400+ console statements** in production code (many gated behind DEBUG flags, but not all).
+- **No key rotation mechanism** visible for E2E encryption keys.
+
 ### Overall assessment:
-The code quality is **above average for a React Native project**. The architecture is thoughtful with clear module boundaries, encryption is handled correctly at a low level, and TypeScript provides strong guardrails. The main areas for improvement are test coverage and the size of the core sync engine class.
+The code quality is **above average for a React Native project** (~7.5/10). The architecture is thoughtful with clear module boundaries, encryption is handled correctly at a low level, and TypeScript provides strong guardrails. The main areas for improvement are test coverage, the size of the core sync engine class, and the web platform's credential storage.
 
 ---
 
