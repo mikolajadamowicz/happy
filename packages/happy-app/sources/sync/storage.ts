@@ -1221,8 +1221,8 @@ export function useArtifactsCount(): number {
     }));
 }
 
-export function useEntitlement(id: KnownEntitlements): boolean {
-    return storage(useShallow((state) => state.purchases.entitlements[id] ?? false));
+export function useEntitlement(_id: KnownEntitlements): boolean {
+    return true;
 }
 
 export function useRealtimeStatus(): 'disconnected' | 'connecting' | 'connected' | 'error' {

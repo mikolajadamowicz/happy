@@ -31,7 +31,7 @@ This creates a `happy-dev` command in your PATH pointing to your local build, wh
 
 | Command | Runs |
 |---------|------|
-| `happy` | Stable npm version (from `npm install -g happy-coder`) |
+| `happy` | Stable npm version (from `npm install -g @homesoft/happy-coder`) |
 | `happy-dev` | Local development version (from this repo) |
 
 **Note:** Run `yarn build` before `yarn link:dev` to ensure the binary exists.
@@ -325,7 +325,7 @@ Maintainers can publish new versions:
 ```bash
 yarn release       # From repo root: choose library to release
 # or directly:
-yarn workspace happy-coder release
+yarn workspace @homesoft/happy-coder release
 ```
 
 This runs tests, builds, and publishes to npm. The published package includes:

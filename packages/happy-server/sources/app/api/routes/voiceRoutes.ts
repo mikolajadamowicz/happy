@@ -24,53 +24,9 @@ export function voiceRoutes(app: Fastify) {
         }
     }, async (request, reply) => {
         const userId = request.userId; // CUID from JWT
-        const { agentId, revenueCatPublicKey } = request.body;
+        const { agentId } = request.body;
 
         log({ module: 'voice' }, `Voice token request from user ${userId}`);
-
-        const isDevelopment = process.env.NODE_ENV === 'development' || process.env.ENV === 'dev';
-
-        // Production requires RevenueCat key
-        if (!isDevelopment && !revenueCatPublicKey) {
-            log({ module: 'voice' }, 'Production environment requires RevenueCat public key');
-            return reply.code(400).send({ 
-                allowed: false,
-                error: 'RevenueCat public key required'
-            });
-        }
-
-        // Check subscription in production
-        if (!isDevelopment && revenueCatPublicKey) {
-            const response = await fetch(
-                `https://api.revenuecat.com/v1/subscribers/${userId}`,
-                {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${revenueCatPublicKey}`,
-                        'Content-Type': 'application/json'
-                    }
-                }
-            );
-
-            if (!response.ok) {
-                log({ module: 'voice' }, `RevenueCat check failed for user ${userId}: ${response.status}`);
-                return reply.send({ 
-                    allowed: false,
-                    agentId
-                });
-            }
-
-            const data = await response.json() as any;
-            const proEntitlement = data.subscriber?.entitlements?.active?.pro;
-            
-            if (!proEntitlement) {
-                log({ module: 'voice' }, `User ${userId} does not have active subscription`);
-                return reply.send({ 
-                    allowed: false,
-                    agentId
-                });
-            }
-        }
 
         // Check if 11Labs API key is configured
         const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY;

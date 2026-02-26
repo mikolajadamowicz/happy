@@ -602,49 +602,8 @@ class Sync {
     }
 
     presentPaywall = async (): Promise<{ success: boolean; purchased?: boolean; error?: string }> => {
-        try {
-            // Check if RevenueCat is initialized
-            if (!this.revenueCatInitialized) {
-                const error = 'RevenueCat not initialized';
-                trackPaywallError(error);
-                return { success: false, error };
-            }
-
-            // Track paywall presentation
-            trackPaywallPresented();
-
-            // Present the paywall
-            const result = await RevenueCat.presentPaywall();
-
-            // Handle the result
-            switch (result) {
-                case PaywallResult.PURCHASED:
-                    trackPaywallPurchased();
-                    // Refresh customer info after purchase
-                    await this.syncPurchases();
-                    return { success: true, purchased: true };
-                case PaywallResult.RESTORED:
-                    trackPaywallRestored();
-                    // Refresh customer info after restore
-                    await this.syncPurchases();
-                    return { success: true, purchased: true };
-                case PaywallResult.CANCELLED:
-                    trackPaywallCancelled();
-                    return { success: true, purchased: false };
-                case PaywallResult.NOT_PRESENTED:
-                    // Don't track error for NOT_PRESENTED as it's a platform limitation
-                    return { success: false, error: 'Paywall not available on this platform' };
-                case PaywallResult.ERROR:
-                default:
-                    const errorMsg = 'Failed to present paywall';
-                    trackPaywallError(errorMsg);
-                    return { success: false, error: errorMsg };
-            }
-        } catch (error: any) {
-            const errorMessage = error.message || 'Failed to present paywall';
-            trackPaywallError(errorMessage);
-            return { success: false, error: errorMessage };
-        }
+        // Self-hosted: everything is free, no paywall needed
+        return { success: true, purchased: true };
     }
 
     async assumeUsers(userIds: string[]): Promise<void> {
@@ -1476,54 +1435,7 @@ class Sync {
     }
 
     private syncPurchases = async () => {
-        try {
-            // Initialize RevenueCat if not already done
-            if (!this.revenueCatInitialized) {
-                // Get the appropriate API key based on platform
-                let apiKey: string | undefined;
-
-                if (Platform.OS === 'ios') {
-                    apiKey = config.revenueCatAppleKey;
-                } else if (Platform.OS === 'android') {
-                    apiKey = config.revenueCatGoogleKey;
-                } else if (Platform.OS === 'web') {
-                    apiKey = config.revenueCatStripeKey;
-                }
-
-                if (!apiKey) {
-                    console.log(`RevenueCat: No API key found for platform ${Platform.OS}`);
-                    return;
-                }
-
-                // Configure RevenueCat
-                if (__DEV__) {
-                    RevenueCat.setLogLevel(LogLevel.DEBUG);
-                }
-
-                // Initialize with the public ID as user ID
-                RevenueCat.configure({
-                    apiKey,
-                    appUserID: this.serverID, // In server this is a CUID, which we can assume is globaly unique even between servers
-                    useAmazon: false,
-                });
-
-                this.revenueCatInitialized = true;
-                console.log('RevenueCat initialized successfully');
-            }
-
-            // Sync purchases
-            await RevenueCat.syncPurchases();
-
-            // Fetch customer info
-            const customerInfo = await RevenueCat.getCustomerInfo();
-
-            // Apply to storage (storage handles the transformation)
-            storage.getState().applyPurchases(customerInfo);
-
-        } catch (error) {
-            console.error('Failed to sync purchases:', error);
-            // Don't throw - purchases are optional
-        }
+        // Self-hosted: no RevenueCat, everything is free
     }
 
     private flushOutbox = async (sessionId: string) => {
