@@ -5,14 +5,16 @@
  * Environment files should be loaded using Node's --env-file flag
  */
 
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import packageJson from '../package.json'
 
 class Configuration {
-  public readonly serverUrl: string
-  public readonly webappUrl: string
+  public serverUrl: string
+  public webappUrl: string
+  public readonly serverUrlFromEnv: boolean
+  public readonly webappUrlFromEnv: boolean
   public readonly isDaemonProcess: boolean
 
   // Directories and paths (from persistence)
@@ -28,7 +30,9 @@ class Configuration {
   public readonly disableCaffeinate: boolean
 
   constructor() {
-    // Server configuration - priority: parameter > environment > default
+    // Server configuration - priority: env var > settings.json (loaded in initialize()) > default
+    this.serverUrlFromEnv = !!process.env.HAPPY_SERVER_URL
+    this.webappUrlFromEnv = !!process.env.HAPPY_WEBAPP_URL
     this.serverUrl = process.env.HAPPY_SERVER_URL || 'https://api.cluster-fluster.com'
     this.webappUrl = process.env.HAPPY_WEBAPP_URL || 'https://app.happy.engineering'
 
@@ -76,6 +80,67 @@ class Configuration {
     if (!existsSync(this.logsDir)) {
       mkdirSync(this.logsDir, { recursive: true })
     }
+  }
+
+  /**
+   * Load persisted server URL from settings.json (if no env var override).
+   * Reads the file directly to avoid circular dependency with persistence.ts.
+   * Must be called early in CLI startup, before any API calls.
+   */
+  async initialize(): Promise<void> {
+    if (this.serverUrlFromEnv && this.webappUrlFromEnv) {
+      return // Both set via env — nothing to load
+    }
+
+    try {
+      if (!existsSync(this.settingsFile)) return
+
+      const content = readFileSync(this.settingsFile, 'utf8')
+      const raw = JSON.parse(content)
+
+      if (!this.serverUrlFromEnv && raw.serverUrl) {
+        this.serverUrl = raw.serverUrl
+      }
+      if (!this.webappUrlFromEnv && raw.webappUrl) {
+        this.webappUrl = raw.webappUrl
+      }
+    } catch {
+      // Settings file missing or corrupt — keep defaults
+    }
+  }
+
+  /**
+   * Determine where the current serverUrl value came from.
+   */
+  get serverUrlSource(): 'env' | 'settings' | 'default' {
+    if (this.serverUrlFromEnv) return 'env'
+    // Check if the current value differs from the hardcoded default
+    if (this.serverUrl !== 'https://api.cluster-fluster.com') return 'settings'
+    // Could still be from settings if it happens to match default, but check file
+    try {
+      if (existsSync(this.settingsFile)) {
+        const content = readFileSync(this.settingsFile, 'utf8')
+        const raw = JSON.parse(content)
+        if (raw.serverUrl) return 'settings'
+      }
+    } catch { /* ignore */ }
+    return 'default'
+  }
+
+  /**
+   * Determine where the current webappUrl value came from.
+   */
+  get webappUrlSource(): 'env' | 'settings' | 'default' {
+    if (this.webappUrlFromEnv) return 'env'
+    if (this.webappUrl !== 'https://app.happy.engineering') return 'settings'
+    try {
+      if (existsSync(this.settingsFile)) {
+        const content = readFileSync(this.settingsFile, 'utf8')
+        const raw = JSON.parse(content)
+        if (raw.webappUrl) return 'settings'
+      }
+    } catch { /* ignore */ }
+    return 'default'
   }
 }
 

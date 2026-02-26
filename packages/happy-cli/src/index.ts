@@ -8,6 +8,7 @@
 
 
 import chalk from 'chalk'
+import { configuration } from '@/configuration'
 import { runClaude, StartOptions } from '@/claude/runClaude'
 import { logger } from './ui/logger'
 import { readCredentials, readSettings } from './persistence'
@@ -26,6 +27,8 @@ import { listDaemonSessions, stopDaemonSession } from './daemon/controlClient'
 import { handleAuthCommand } from './commands/auth'
 import { handleConnectCommand } from './commands/connect'
 import { handleSandboxCommand } from './commands/sandbox'
+import { handleSetupCommand } from './commands/setup'
+import { ensureServerUrlConfigured } from './ui/serverSetup'
 import { spawnHappyCLI } from './utils/spawnHappyCLI'
 import { claudeCliPath } from './claude/claudeLocal'
 import { execFileSync } from 'node:child_process'
@@ -33,6 +36,9 @@ import { extractNoSandboxFlag } from './utils/sandboxFlags'
 
 
 (async () => {
+  // Load persisted server URL from settings.json (env var > settings > default)
+  await configuration.initialize()
+
   const args = process.argv.slice(2)
 
   // If --version is passed - do not log, its likely daemon inquiring about our version
@@ -94,6 +100,17 @@ import { extractNoSandboxFlag } from './utils/sandboxFlags'
       process.exit(1)
     }
     return;
+  } else if (subcommand === 'setup') {
+    try {
+      await handleSetupCommand(args.slice(1));
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error')
+      if (process.env.DEBUG) {
+        console.error(error)
+      }
+      process.exit(1)
+    }
+    return;
   } else if (subcommand === 'bye') {
     console.log('Bye!');
     process.exit(0);
@@ -111,6 +128,7 @@ import { extractNoSandboxFlag } from './utils/sandboxFlags'
         }
       }
       
+      await ensureServerUrlConfigured();
       const {
         credentials
       } = await authAndSetupMachineIfNeeded();
@@ -316,6 +334,7 @@ import { extractNoSandboxFlag } from './utils/sandboxFlags'
         }
       }
       
+      await ensureServerUrlConfigured();
       const {
         credentials
       } = await authAndSetupMachineIfNeeded();
@@ -366,6 +385,7 @@ import { extractNoSandboxFlag } from './utils/sandboxFlags'
       }
 
       const resolved = resolveAcpAgentConfig(acpArgs);
+      await ensureServerUrlConfigured();
       const { credentials } = await authAndSetupMachineIfNeeded();
 
       logger.debug('Ensuring Happy background service is running & matches our version...');
@@ -637,6 +657,7 @@ ${chalk.bold('Usage:')}
   happy acp               Start a generic ACP-compatible agent
   happy connect           Connect AI vendor API keys
   happy sandbox           Configure and manage OS-level sandboxing
+  happy setup             Configure server URL (self-hosted/cloud)
   happy notify            Send push notification
   happy daemon            Manage background service that allows
                             to spawn new sessions away from your computer
@@ -687,7 +708,8 @@ ${chalk.bold.cyan('Claude Code Options (from `claude --help`):')}
       // Don't exit - continue to pass --version to Claude Code
     }
 
-    // Normal flow - auth and machine setup
+    // Normal flow - server setup (first-run prompt) then auth and machine setup
+    await ensureServerUrlConfigured();
     const {
       credentials
     } = await authAndSetupMachineIfNeeded();

@@ -102,9 +102,15 @@ export async function runDoctorCommand(filter?: 'all' | 'daemon'): Promise<void>
         console.log('');
 
         // Configuration
+        const serverSourceLabel = {
+            env: chalk.yellow('env var'),
+            settings: chalk.cyan('settings.json'),
+            default: chalk.gray('default'),
+        }
         console.log(chalk.bold('⚙️  Configuration'));
         console.log(`Happy Home: ${chalk.blue(configuration.happyHomeDir)}`);
-        console.log(`Server URL: ${chalk.blue(configuration.serverUrl)}`);
+        console.log(`Server URL: ${chalk.blue(configuration.serverUrl)}  (${serverSourceLabel[configuration.serverUrlSource]})`);
+        console.log(`Webapp URL: ${chalk.blue(configuration.webappUrl)}  (${serverSourceLabel[configuration.webappUrlSource]})`);
         console.log(`Logs Dir: ${chalk.blue(configuration.logsDir)}`);
 
         // Environment

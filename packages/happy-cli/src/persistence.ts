@@ -193,7 +193,7 @@ export const CURRENT_PROFILE_VERSION = '1.0.0';
 // Settings schema version: Integer for overall Settings structure compatibility
 // Incremented when Settings structure changes (e.g., adding profiles array was v1→v2)
 // Used for migration logic in readSettings()
-export const SUPPORTED_SCHEMA_VERSION = 2;
+export const SUPPORTED_SCHEMA_VERSION = 3;
 
 // Profile version validation
 export function validateProfileVersion(profile: AIBackendProfile): boolean {
@@ -210,7 +210,7 @@ export function isProfileVersionCompatible(profileVersion: string, requiredVersi
   return major === requiredMajor;
 }
 
-interface Settings {
+export interface Settings {
   // Schema version for backwards compatibility
   schemaVersion: number
   onboardingCompleted: boolean
@@ -226,6 +226,9 @@ interface Settings {
   sandboxConfig?: SandboxConfig
   // CLI-local environment variable cache (not synced)
   localEnvironmentVariables: Record<string, Record<string, string>> // profileId -> env vars
+  // Self-hosted server URL configuration
+  serverUrl?: string
+  webappUrl?: string
 }
 
 const defaultSettings: Settings = {
@@ -257,8 +260,11 @@ function migrateSettings(raw: any, fromVersion: number): any {
     migrated.schemaVersion = 2;
   }
 
-  // Future migrations go here:
-  // if (fromVersion < 3) { ... }
+  // Migration from v2 to v3 (added serverUrl/webappUrl)
+  if (fromVersion < 3) {
+    // No-op: serverUrl and webappUrl are optional fields
+    migrated.schemaVersion = 3;
+  }
 
   return migrated;
 }
